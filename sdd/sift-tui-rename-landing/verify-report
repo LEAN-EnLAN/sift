@@ -1,0 +1,60 @@
+## Verification Report
+
+- Change: `sift-tui-rename-landing` (PR 1 boundary)
+- Mode: **STRICT TDD**
+- Date: 2026-05-11
+- Verifier: sdd-verify executor
+
+### Artifact Retrieval (spec/design/tasks/apply-progress)
+| Artifact | Status | Evidence |
+|---|---|---|
+| spec | ❌ Missing | `sdd/sift-tui-rename-landing/spec.md` not found |
+| design | ❌ Missing | `sdd/sift-tui-rename-landing/design.md` not found |
+| tasks | ❌ Missing | `sdd/sift-tui-rename-landing/tasks.md` not found |
+| apply-progress | ❌ Missing | `sdd/sift-tui-rename-landing/apply-progress.md` not found |
+
+### Completeness vs Rename Slice Checks
+| Check | Result | Evidence |
+|---|---|---|
+| Package dir is `src/sift/` | ✅ | `src/sift/**` exists; `src/repo_scout/**` not found |
+| `pyproject.toml` name is `sift` | ✅ | `pyproject.toml:6` → `name = "sift"` |
+| CLI `prog` is `sift` | ✅ | `src/sift/cli.py:183` → `prog="sift"` |
+| Config path `~/.config/sift/` + fallback | ✅ | `src/sift/auth.py:49` new path, `:57` old fallback |
+| `_meta` has `sift_version` + `repo_scout_version` | ✅ | `src/sift/render.py:104-105`; smoke output confirms |
+| Imports use `sift` | ✅ | no `import/from repo_scout` matches in `*.py` |
+| Cache dir is `.cache/sift` | ✅ | `src/sift/github.py:27` default cache dir |
+| 73 tests pass | ✅ | `pytest tests/` → `73 passed` |
+| `AGENTS.md` references `sift` | ✅ | `AGENTS.md` includes `sift` examples and `_meta.sift_version` |
+| `README` references `sift` | ✅ | multiple matches; includes config/cache docs |
+
+### Build / Test / Lint / Smoke Evidence
+| Command | Result | Notes |
+|---|---|---|
+| `python -m compileall src tests` | ✅ PASS | Bytecode compilation successful |
+| `pytest tests/` | ✅ PASS | `73 passed, 14 warnings` |
+| `ruff check .` | ⚠️ WARN | 2 lint errors (`F401`) in `tests/test_migration.py` |
+| `python -m sift.cli --help` | ❌ FAIL | `ModuleNotFoundError: No module named 'sift'` without PYTHONPATH/install |
+| `PYTHONPATH=src python -m sift.cli --help` | ✅ PASS | Help shows `prog: sift` |
+| `PYTHONPATH=src python -m sift.cli --agent ...` | ✅ PASS | `_meta` includes both version keys |
+
+### TDD Compliance (Strict-TDD Required)
+| Check | Result | Details |
+|---|---|---|
+| TDD evidence reported in apply-progress | ❌ | `apply-progress` artifact missing |
+| RED/GREEN/TRIANGULATE/SAFETY NET verifiable | ❌ | No TDD cycle table available |
+| Assertion quality audit on changed tests | ⚠️ Partial | Migration tests reviewed; no tautologies found |
+
+### Issues
+
+#### CRITICAL
+1. Required SDD artifacts for this change are missing from the specified location (`spec`, `design`, `tasks`, `apply-progress`).
+2. Strict-TDD verification cannot be completed without `apply-progress` TDD Cycle Evidence.
+
+#### WARNING
+1. Ruff reports 2 unused imports in `tests/test_migration.py` (`os`, `pytest`).
+2. CLI module help fails without installation/PYTHONPATH (`python -m sift.cli --help`), though it works with `PYTHONPATH=src`.
+
+## Result Contract
+**FAIL**
+
+Reason: rename slice checks and runtime smoke mostly pass, but strict SDD verify is blocked by missing required artifacts and missing strict-TDD evidence source (`apply-progress`).

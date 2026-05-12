@@ -1,0 +1,112 @@
+## Verification Report
+
+**Change**: fast-ai-mode-release  
+**Version**: N/A  
+**Mode**: Strict TDD
+
+### Completeness
+| Metric | Value |
+|--------|-------|
+| Tasks total | 16 |
+| Tasks complete | 16 |
+| Tasks incomplete | 0 |
+
+### Build & Tests Execution
+**Build**: ✅ Passed
+```text
+python -m compileall src tests
+Listing 'src'...
+Listing 'src/repo_scout'...
+Listing 'src/repo_scout.egg-info'...
+Listing 'tests'...
+```
+
+**Tests**: ✅ 68 passed / ❌ 0 failed / ⚠️ 0 skipped
+```text
+pytest tests/
+collected 68 items
+... 68 passed in 0.13s
+```
+
+**Quality gates additionally required by prompt**
+- `ruff check .` → ✅ All checks passed
+- `PYTHONPATH=src python -m repo_scout.cli --help` → ✅ includes `--agent/--ai` and `--speed`
+- `PYTHONPATH=src python -m repo_scout.cli --agent --query "JWT authentication" --language Python --speed fast --format json --top 1` → ✅ emits valid JSON with `_meta`
+- repo-scout-web removal check (`pyproject.toml` + file existence) → ✅ `web_file_exists=False`, `web_entrypoint_present=False`
+
+### TDD Compliance
+| Check | Result | Details |
+|-------|--------|---------|
+| TDD Evidence reported | ✅ | Found in apply-progress (`sdd/fast-ai-mode-release/apply-progress`) |
+| All tasks have tests | ✅ | Behavior tasks mapped to test files; structural web-removal marked N/A |
+| RED confirmed (tests exist) | ✅ | `tests/test_cli.py`, `tests/test_render.py`, `tests/test_query.py`, `tests/test_scoring.py` exist |
+| GREEN confirmed (tests pass) | ✅ | Full suite passes now (`68/68`) |
+| Triangulation adequate | ✅ | quick-key `d/j` fix adds 3 dedicated cases |
+| Safety Net for modified files | ✅ | apply-progress reports safety-net runs and current suite is green |
+
+**TDD Compliance**: 6/6 checks passed
+
+---
+
+### Test Layer Distribution
+| Layer | Tests | Files | Tools |
+|-------|-------|-------|-------|
+| Unit | 68 | 5 | pytest |
+| Integration | 0 | 0 | not installed/used |
+| E2E | 0 | 0 | not installed/used |
+| **Total** | **68** | **5** | |
+
+---
+
+### Changed File Coverage
+Coverage analysis skipped — no changed-file coverage command was required/executed in this verify run.
+
+---
+
+### Assertion Quality
+**Assertion quality**: ✅ All assertions verify real behavior
+
+---
+
+### Quality Metrics
+**Linter**: ✅ No errors (`ruff check .`)  
+**Type Checker**: ➖ Not available in required verify gates
+
+### Spec Compliance Matrix
+| Requirement | Scenario | Test | Result |
+|-------------|----------|------|--------|
+| Remove unused web surface | Entrypoint removed | `pyproject.toml` scripts + `src/repo_scout/web.py` existence check | ✅ COMPLIANT |
+| Remove unused web surface | CLI remains intact | `pytest tests/` + CLI help smoke | ✅ COMPLIANT |
+| Hard relevance gate | Popular but irrelevant repo blocked | `tests/test_scoring.py` gate tests | ✅ COMPLIANT |
+| Hard relevance gate | Relevant niche repo retained | `tests/test_scoring.py` gate tests | ✅ COMPLIANT |
+| Speed tiers | Fast mode minimizes work | `tests/test_query.py`, `tests/test_cli.py` speed parsing/config | ✅ COMPLIANT |
+| Speed tiers | Thorough preserves broad search | `tests/test_cli.py` speed tier coverage | ✅ COMPLIANT |
+| Single-key actions | Action keys dispatch (`r,q,s,d,j,o`) | `tests/test_cli.py` incl. `test_d_*`, `test_j_shows_json` | ✅ COMPLIANT |
+| Single-key actions | Headless mode unaffected | `tests/test_cli.py::test_existing_json_output_preserved_in_headless` | ✅ COMPLIANT |
+| Agent mode output | Agent JSON preserves compatibility | agent smoke output + `tests/test_render.py` | ✅ COMPLIANT |
+| Agent mode output | Agent metadata and docs | `_meta` present + `AGENTS.md` | ✅ COMPLIANT |
+
+**Compliance summary**: 10/10 scenarios compliant
+
+### Correctness (Static Evidence)
+| Requirement | Status | Notes |
+|------------|--------|-------|
+| quick-key blocker (`d/j`) fixed | ✅ Implemented | `src/repo_scout/cli.py` handles `key == "d"` and `key == "j"`; hint bar updated |
+| repo-scout-web removed | ✅ Implemented | no web file, no script entrypoint |
+
+### Coherence (Design)
+| Decision | Followed? | Notes |
+|----------|-----------|-------|
+| Hard relevance threshold 0.28 | ✅ Yes | Matches design and tests |
+| Speed via `SearchOptions.speed` | ✅ Yes | Matches design |
+| Single-key stdin dispatch | ✅ Yes | Matches design; includes `d/j` |
+| Agent `_meta` envelope | ✅ Yes | Matches spec and docs |
+
+### Issues Found
+**CRITICAL**: None  
+**WARNING**: Non-blocking warnings from `pytest-asyncio` config deprecation and rich ipywidgets hint  
+**SUGGESTION**: Add changed-file coverage gate in future strict TDD verify profiles
+
+### Verdict
+PASS
+All required strict-TDD verification gates passed and previous CRITICAL `d/j` blocker is resolved.

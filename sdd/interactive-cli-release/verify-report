@@ -1,0 +1,125 @@
+## Verification Report
+
+**Change**: interactive-cli-release
+**Version**: N/A
+**Mode**: Strict TDD
+
+### Completeness
+| Metric | Value |
+|--------|-------|
+| Tasks total | 31 |
+| Tasks complete | 31 |
+| Tasks incomplete | 0 |
+
+### Build & Tests Execution
+**Build**: ✅ Passed
+```text
+python -m compileall src tests
+```
+
+**Tests**: ✅ 53 passed / ❌ 0 failed / ⚠️ 0 skipped
+```text
+pytest tests/
+======================= 53 passed, 10 warnings in 0.11s =======================
+```
+
+**CLI help**: ✅ Passed
+```text
+PYTHONPATH=src python -m repo_scout.cli --help
+```
+
+**Headless smokes (`--no-interactive`)**: ✅ Passed
+```text
+PYTHONPATH=src python -m repo_scout.cli -q "jwt" -l Python --top 2 --format json --no-interactive
+PYTHONPATH=src python -m repo_scout.cli -q "jwt" -l Python --top 2 --format table --no-interactive
+PYTHONPATH=src python -m repo_scout.cli -q "jwt" -l Python --top 2 --format markdown --no-interactive
+```
+
+### TDD Compliance
+| Check | Result | Details |
+|-------|--------|---------|
+| TDD Evidence reported | ✅ | Found in apply-progress artifact (`sdd/interactive-cli-release/apply-progress`) |
+| All tasks have tests | ✅ | 1/1 TDD-tracked task has test file (`tests/test_cli.py`) |
+| RED confirmed (tests exist) | ✅ | `test_progress_context_exits_before_compact_render` exists |
+| GREEN confirmed (tests pass) | ✅ | Full suite passes (53/53) |
+| Triangulation adequate | ✅ | Lifecycle order explicitly asserted (`progress_exit` before `render`) |
+| Safety Net for modified files | ✅ | apply-progress records 52/52 before modifications |
+
+**TDD Compliance**: 6/6 checks passed
+
+---
+
+### Test Layer Distribution
+| Layer | Tests | Files | Tools |
+|-------|-------|-------|-------|
+| Unit | 53 | 5 | pytest |
+| Integration | 0 | 0 | not installed/used |
+| E2E | 0 | 0 | not installed/used |
+| **Total** | **53** | **5** | |
+
+---
+
+### Changed File Coverage
+| File | Line % | Branch % | Uncovered Lines | Rating |
+|------|--------|----------|-----------------|--------|
+| `src/repo_scout/scoring.py` | 84% | N/A | 12, 15-16, 26, 31, 33, 35, 37, 50, 71, 88, 164, 168-176 | ⚠️ Acceptable |
+| `tests/test_cli.py` | N/A | N/A | N/A (test file) | ➖ Not applicable |
+
+**Average changed production-file coverage**: 84%
+
+---
+
+### Assertion Quality
+**Assertion quality**: ✅ All assertions verify real behavior.
+
+---
+
+### Quality Metrics
+**Linter (ruff)**: ✅ No errors (`ruff 0.8.0`, `ruff check .`)
+**Type Checker**: ➖ Not available (not run)
+
+### Spec Compliance Matrix
+| Requirement | Scenario | Test | Result |
+|-------------|----------|------|--------|
+| TTY-Default Interactive Entry | Launch without required flags in TTY | `tests/test_interactive.py::TestIsInteractive::*` + `tests/test_cli.py::TestMainBranching::test_interactive_path_calls_run_interactive_mode` | ✅ COMPLIANT |
+| TTY-Default Interactive Entry | Explicit flags still allowed in TTY | `tests/test_cli.py::TestRunInteractiveMode::test_search_uses_provided_query_and_language` | ✅ COMPLIANT |
+| Interactive Search Feedback | Search progress visible | `tests/test_cli.py::TestRunInteractiveMode::test_interactive_mode_uses_compact_renderer` + progress context path execution in `main()` | ✅ COMPLIANT |
+| Interactive Search Feedback | Progress ends before results render | `tests/test_cli.py::TestRunInteractiveMode::test_progress_context_exits_before_compact_render` | ✅ COMPLIANT |
+| Compact Interactive Results and Actions | Compact result presentation | `tests/test_cli.py::TestRunInteractiveMode::test_interactive_mode_uses_compact_renderer` + `tests/test_render.py::TestRenderCompactTable::*` | ✅ COMPLIANT |
+| Compact Interactive Results and Actions | Post-results action loop | `tests/test_cli.py::TestPostResultsLoop::*` | ✅ COMPLIANT |
+| Clean Interactive Interruption | Ctrl+C during search | `tests/test_cli.py::TestRunInteractiveMode::test_ctrl_c_during_search_cancels` | ✅ COMPLIANT |
+| Explicit Headless Activation | Flag disables prompts | `tests/test_cli.py::TestRunInteractiveMode::test_no_interactive_flag_blocks_interactive` | ✅ COMPLIANT |
+| Explicit Headless Activation | Environment disables prompts | `tests/test_cli.py::TestMainBranching::test_headless_env_var_blocks_interactive` | ✅ COMPLIANT |
+| Explicit Headless Activation | Non-TTY disables prompts | `tests/test_interactive.py::TestIsInteractive::*` | ✅ COMPLIANT |
+| Deterministic Structured Output | JSON remains agent-safe | Headless smoke: `--format json --no-interactive` | ✅ COMPLIANT |
+| Deterministic Structured Output | Table and markdown remain headless | Headless smokes: `--format table/markdown --no-interactive` | ✅ COMPLIANT |
+| Headless Input Contract | Missing required inputs in CI | `tests/test_cli.py::TestMainBranching::test_missing_query_in_headless_returns_error` + `...test_missing_language_in_headless_returns_error` | ✅ COMPLIANT |
+
+**Compliance summary**: 13/13 scenarios compliant
+
+### Correctness (Static Evidence)
+| Requirement | Status | Notes |
+|------------|--------|-------|
+| Progress lifecycle ordering | ✅ Implemented | Explicit test verifies progress context exits before render call |
+| Headless renderers preserved | ✅ Implemented | json/table/markdown smoke commands passed under `--no-interactive` |
+| Lint blocker resolved | ✅ Implemented | `scoring.py` unused import removed; ruff passes |
+
+### Coherence (Design)
+| Decision | Followed? | Notes |
+|----------|-----------|-------|
+| Keep headless path unchanged | ✅ Yes | Headless commands produce deterministic output |
+| Use compact renderer for interactive | ✅ Yes | `render_compact_table` is exercised by interactive tests |
+| Rich progress in interactive flow | ✅ Yes | Progress lifecycle tested via mocked `Progress` context |
+
+### Issues Found
+**CRITICAL**: None
+
+**WARNING**
+1. Pytest emits deprecation/runtime warnings from third-party plugins (`pytest-asyncio` loop-scope deprecation, Rich/Jupyter widget warning); non-blocking for this change.
+
+**SUGGESTION**
+1. Add explicit pytest config for `asyncio_default_fixture_loop_scope` to silence upcoming default-change warning.
+
+### Verdict
+**PASS**
+All previous blockers are fixed; strict TDD verify gates passed with no CRITICAL issues.

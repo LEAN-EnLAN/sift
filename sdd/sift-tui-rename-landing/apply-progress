@@ -1,0 +1,68 @@
+## Apply Progress — sift-tui-rename-landing (PR 2)
+
+**Mode**: Strict TDD
+**Date**: 2026-05-11
+**Delivery**: size:exception (~650 lines), stacked-to-main PR 2
+
+### Completed Tasks
+
+#### Fix First
+- [x] **1. ruff F401 in tests/test_migration.py**: Removed unused `os` and `pytest` imports.
+
+#### Phase 2 - TUI Core
+- [x] **2. Add `textual>=2.0` to pyproject.toml**: Added textual and dev deps (pytest-asyncio).
+- [x] **3. Create `src/sift/tui.py`**: `SiftApp` class with Textual App — input query → input language → async search worker → scrollable results → detail view. CSS theme: dark bg, green accent #22F5A7, monospace, responsive. Footer with key bindings (q/esc/ctrl+d/r). Async Worker wrapping `sift.cli.run()`. Detail view using RichLog with `render_markdown()`. Resize handling via responsive CSS.
+- [x] **4. Wire TUI into `cli.py`**: `run_tui_mode()` replaces `run_interactive_mode()` in TTY path. `_is_headless()` helper checks both `SIFT_HEADLESS` and `REPO_SCOUT_HEADLESS`. `--force-interactive` preserves old Rich interactive mode as fallback.
+- [x] **5. `interactive.py`**: `is_interactive()` helper preserved. `InteractivePrompt`/`InteractiveSplash` kept for `--force-interactive` fallback.
+- [x] **6. Add TUI tests**: Created `tests/test_tui.py` with 7 tests using Textual Pilot — import check, CSS check, mount/quit, widget presence (query input, language input, results panel), search flow with mocked `run()`.
+
+#### Phase 3 - Landing page
+- [x] **7. Remove fake metrics**: Removed fake stars (4,217), contributors (82), downloads (218k), coverage (96%), marquee metrics, README badges, GitHub sidebar count, contributor avatars, issue counts.
+- [x] **8. Real content**: Install command `pipx install sift`, real CLI examples (`--query`, `--language` flags), version bumped to v0.3.0, meaningful badges (license, python, pipx, output formats). Roadmap updated to real version history.
+- [x] **9. script.js**: Created `landing-page/script.js` with copy-to-clipboard functionality. Removed Cloudflare analytics beacon.
+- [x] **10. Style alignment**: Already aligned with sift brand (green #22F5A7, dark theme, monospace). Verified CSS matches existing design tokens.
+
+#### Phase 4 - Docs
+- [x] **11. Update README.md**: Added pipx install section, TUI mode section with keyboard shortcuts, headless escape hatch docs, updated modes section to reflect TUI as default.
+- [x] **12. Update AGENTS.md**: Added TUI Caveat section, Entrypoint stability guarantee, separated Environment Variables section.
+
+#### Phase 5 - Agent mode verification
+- [x] **13. Verify `--agent`/`--ai` still works**: Agent JSON contract verified — `_meta` has `sift_version` + `repo_scout_version`, stable JSON fields preserved.
+- [x] **14. AGENTS.md matches actual output**: Verified field names match exactly.
+
+### TDD Cycle Evidence
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 3 (tui.py) | `tests/test_tui.py` | Integration | N/A (new file) | ✅ Written (7 tests fail without mod) | ✅ Passed (7/7) | ✅ 3 cases (import, CSS, lifecycle) | ✅ Clean |
+| 4 (cli wiring) | `tests/test_cli.py` | Unit | ✅ 73/73 | ✅ Updated test expectations first | ✅ Passed (36 CLI tests) | ✅ Pre-existing cases | ✅ Import cleanup |
+| 6 (TUI tests) | `tests/test_tui.py` | Integration | ✅ 73/73 | ✅ Written first | ✅ Passed (7/7) | ✅ 3 cases | ✅ None needed |
+
+### Test Summary
+- **Total tests written**: 7 (new TUI tests)
+- **Total tests passing**: 80 (73 original + 7 new)
+- **Layers used**: Unit (36), Integration (7)
+- **Pure functions created**: 1 (`_is_headless()`)
+
+### Files Changed
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `src/sift/tui.py` | Created | Textual TUI App with conversational search flow |
+| `src/sift/cli.py` | Modified | Added `run_tui_mode()`, `_is_headless()`, updated main flow |
+| `tests/test_tui.py` | Created | 7 TUI tests using Textual Pilot |
+| `tests/test_cli.py` | Modified | Updated tests to route through TUI or `--force-interactive` |
+| `tests/test_migration.py` | Modified | Removed unused `os` and `pytest` imports |
+| `pyproject.toml` | Modified | Added `textual>=2.0`, `pytest-asyncio` |
+| `landing-page/index.html` | Modified | Removed fake metrics, real install/content |
+| `landing-page/script.js` | Created | Copy-to-clipboard functionality |
+| `README.md` | Modified | Added pipx install, TUI section |
+| `AGENTS.md` | Modified | Added TUI Caveat, entrypoint, env vars section |
+
+### Deviations from Design
+None — implementation follows user's explicit task list.
+
+### Issues Found
+None.
+
+### What's Left
+- [ ] PR 2 is complete and ready for sdd-verify.
