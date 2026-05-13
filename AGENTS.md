@@ -1,5 +1,12 @@
 # Agent Integration Guide — sift
 
+> **Current session context** — set these before starting work:
+> - **Active mission**: {{ mission-name }}
+> - **Benchmark artifact**: {{ link to benchmark or spec }}
+> - **Current SDD gate**: {{ explore / propose / spec / design / tasks / apply / verify / archive }}
+> - **Next gate to clear**: {{ next-gate }}
+> - **Mission rules**: [`.atl/mission-rules.md`](.atl/mission-rules.md)
+
 ## Quick Start
 
 ```bash
@@ -85,3 +92,37 @@ top 5 out. Agents should pass filters explicitly via flags.
 2. **JSON fields**: `results[].{name,url,description,language,last_commit,score,score_parts,stars,forks,license,why}` are stable across releases.
 3. **`_meta` fields**: New keys may be added; existing keys will not be removed without a major version bump.
 4. **Exit codes**: Preserved across releases.
+
+## Mission Orchestration
+
+### Source of truth
+
+[`.atl/mission-rules.md`](.atl/mission-rules.md) is the **canonical mission
+artifact** for this project. Every agent MUST read it before making design
+decisions, scoping changes, or prioritizing work. If the mission, north-star
+metric, or prioritization rules change, `.atl/mission-rules.md` is updated —
+no other artifact overrides it.
+
+### Prioritization guidance
+
+When ranking work across domains and in-flight changes:
+
+1. **Scoring/retrieval v2 improvements** (recommendation quality) come first.
+2. **UX and documentation** that reduces agent or human friction comes second.
+3. **Test/reliability hardening** comes next.
+4. **New infrastructure without user-facing value** is deferred unless it
+   unblocks higher-priority work.
+5. No more than **2 SDD changes in flight** at once. Idle changes (>7 days)
+   should be archived or deferred.
+
+### Boundary discipline
+
+Before expanding a change's scope beyond its current PR boundary, an agent
+MUST explicitly state:
+
+- WHAT is being deferred
+- WHY it is out of scope for the current change
+- WHERE the deferred work is tracked (new SDD proposal or existing issue)
+
+The 400-line default PR budget applies unless a `size:exception` is recorded
+and acknowledged.

@@ -201,7 +201,17 @@ def render_markdown(repos: list[RepoCandidate], query: str, languages: list[str]
         lines.append(f"- **Última actividad (último commit):** {last_commit}")
         lines.append(f"- **Lenguaje:** {r.language or 'N/D'} | **Stars:** {r.stars} | **Forks:** {r.forks} | **Licencia:** {r.license_spdx or 'N/D'}")
         lines.append(f"- **Por qué este repo:** {why_text(r)}")
-        lines.append(f"- **Score breakdown:** relevancia {r.score_parts.get('relevance')}%, actividad {r.score_parts.get('activity')}%, comunidad {r.score_parts.get('community')}%, docs {r.score_parts.get('docs')}%, mantenimiento {r.score_parts.get('maintenance')}%")
+        lines.append(
+            "- **Score breakdown:** "
+            f"relevancia {r.score_parts.get('relevance', 0)}%, "
+            f"actividad {r.score_parts.get('activity', r.score_parts.get('maintenance', 0))}%, "
+            f"comunidad {r.score_parts.get('community', 0)}%, "
+            f"docs {r.score_parts.get('docs', 0)}%, "
+            f"mantenimiento {r.score_parts.get('maintenance', 0)}%, "
+            f"modernidad {r.score_parts.get('modernity', 0)}%, "
+            f"autoridad {r.score_parts.get('authority', 0)}%, "
+            f"penalización {r.score_parts.get('penalties', 0)}%"
+        )
         lines.append("")
 
     lines.append("## Mini comparación")

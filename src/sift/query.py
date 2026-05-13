@@ -106,6 +106,20 @@ SPEED_KEYWORDS: dict[str, str] = {
     "exhaustiva": "thorough",
 }
 
+_DOMAIN_TRIGGER_SETS: dict[str, set[str]] = {
+    "pdf": {"pdf", "pdfs"},
+    "jwt-auth": {"jwt", "json web token", "token"},
+    "auth": {"auth", "authentication", "login", "sso", "oauth"},
+    "orm": {"orm"},
+    "boilerplate": {"boilerplate", "template", "starter", "scaffold"},
+    "scraping": {"scraping", "crawler", "scrape"},
+    "cli": {"cli", "command line"},
+    "testing": {"testing", "test", "tests"},
+    "cache": {"cache", "caching"},
+    "logging": {"log", "logging", "logger"},
+    "serialization": {"serialize", "serialization", "deserialize"},
+}
+
 LANGUAGE_HINT_PREFIXES = {"en", "in", "with", "using", "para"}
 NON_LANGUAGE_FALLBACK_TOKENS = {
     *STOPWORDS,
@@ -235,6 +249,78 @@ def extract_keywords(natural_query: str) -> list[str]:
     return keywords[:10]
 
 
+def classify_domain(keywords: list[str]) -> str | None:
+    """Classify a list of keywords into a domain tag.
+
+    Counts how many keywords match each domain's trigger set.
+    The domain with the most matches wins. Ties between jwt-auth
+    and auth are resolved in favor of jwt-auth (more specific).
+
+    Args:
+        keywords: Extracted keyword strings from the user's query.
+
+    Returns:
+        Domain string (e.g., 'pdf', 'jwt-auth', 'auth') or None if no match.
+    """
+    counts: dict[str, int] = {}
+    for kw in keywords:
+        kw_l = kw.lower().strip()
+        for domain, triggers in _DOMAIN_TRIGGER_SETS.items():
+            if kw_l in triggers:
+                counts[domain] = counts.get(domain, 0) + 1
+    if not counts:
+        return None
+    max_count = max(counts.values())
+    tied = [d for d, c in counts.items() if c == max_count]
+    if "jwt-auth" in tied and "auth" in tied:
+        return "jwt-auth"
+    return tied[0]
+
+
+def _apply_lexical_traps(domain: str | None, keywords: list[str]) -> list[str]:
+    """Filter out keywords that match lexical traps for the given domain.
+
+    Lexical traps are terms that indicate generic/toy projects
+    rather than serious libraries (e.g., 'editor' for PDF domain).
+
+    Args:
+        domain: The inferred domain tag or None.
+        keywords: List of keyword strings to filter.
+
+    Returns:
+        Filtered keyword list with trap terms removed.
+    """
+    if domain is None:
+        return keywords[:]
+
+    from .scoring.seeds import LEXICAL_TRAPS  # noqa: late import avoids cycles
+
+    if domain not in LEXICAL_TRAPS:
+        return keywords[:]
+    traps = LEXICAL_TRAPS[domain]
+    return [kw for kw in keywords if kw.lower().strip() not in traps]
+
+
+def _inject_seeds(domain: str | None) -> list[str]:
+    """Get domain seed repository names for the given domain.
+
+    Args:
+        domain: The inferred domain tag or None.
+
+    Returns:
+        List of seed repo names (e.g., ['pymupdf', 'pypdf']).
+        Empty list if domain is None or unknown.
+    """
+    if domain is None:
+        return []
+
+    from .scoring.seeds import DOMAIN_SEEDS  # noqa: late import avoids cycles
+
+    if domain not in DOMAIN_SEEDS:
+        return []
+    return list(DOMAIN_SEEDS[domain])
+
+
 def build_search_queries(
     natural_query: str,
     language: str | None,
@@ -246,14 +332,22 @@ def build_search_queries(
     include_archived: bool = False,
     max_variants: int = 8,
 ) -> list[str]:
-    """Construye varias queries complementarias para aumentar recall.
+    """Construye hasta 5 variantes de búsqueda usando clasificación por dominio.
 
-    La API de GitHub trata los términos libres como AND. Por eso no ponemos todos los
-    sinónimos juntos: generamos variantes pequeñas y después re-rankeamos localmente.
+    En lugar de generar muchas variantes genéricas, clasificamos la intención del
+    query (PDF, JWT, etc.), inyectamos seeds de ecosistemas conocidos y evitamos
+    términos trampa que traen ruido (ej: "editor" en dominio PDF).
+
+    La API de GitHub trata los términos libres como AND. Generamos variantes
+    pequeñas y después re-rankeamos localmente.
     """
     keywords = extract_keywords(natural_query)
     if not keywords:
         keywords = [natural_query.strip()]
+
+    domain = classify_domain(keywords)
+    clean_kw = _apply_lexical_traps(domain, keywords)
+    seeds = _inject_seeds(domain)
 
     qualifiers: list[str] = []
     if language:
@@ -272,21 +366,35 @@ def build_search_queries(
     base = " ".join(qualifiers)
     variants: list[str] = []
 
-    # Variante principal: hasta 3 keywords, evita queries demasiado restrictivas.
-    variants.append(" ".join(keywords[:2] + [base]))
+    # 1. Seed-forward: inject domain seeds for known libraries.
+    if seeds:
+        seed_terms = " ".join(seeds[:3])
+        variants.append(f"{seed_terms} {base}")
+        variants.append(f"{seed_terms} in:name,description,readme {base}")
 
-    # Variante enfocada en repos que declaran el concepto en nombre/descripción/README.
-    variants.append(" ".join(keywords[:2] + ["in:name,description,readme", base]))
+    # 2. Domain-in-field: use the domain term with in qualifier.
+    if domain:
+        domain_term = domain.replace("-auth", " auth").replace("-", " ")
+        variants.append(f"{domain_term} in:name,description,readme {base}")
 
-    # Variantes individuales para no perder repos por sinónimos incompatibles.
-    for kw in keywords[:5]:
-        variants.append(" ".join([kw, base]))
+    # 3. Keyword-broad: prefer a non-domain keyword (e.g. a tech/library name).
+    domain_triggers = _DOMAIN_TRIGGER_SETS.get(domain, set()) if domain else set()
+    non_domain_kw = [kw for kw in clean_kw if kw.lower().strip() not in domain_triggers]
+    if non_domain_kw:
+        variants.append(f"{non_domain_kw[0]} {base}")
+    elif clean_kw:
+        variants.append(f"{clean_kw[0]} {base}")
 
-    # Si hay framework o librería concreta, suele estar en topics.
-    for kw in keywords[:3]:
-        safe_topic = re.sub(r"[^a-zA-Z0-9-]", "", kw.lower())
+    # 4. Topic-targeted: use domain as a GitHub topic.
+    if domain:
+        safe_topic = re.sub(r"[^a-zA-Z0-9-]", "", domain)
         if safe_topic:
-            variants.append(" ".join([f"topic:{safe_topic}", base]))
+            variants.append(f"topic:{safe_topic} {base}")
+
+    # 5. Fallback: if very few variants, add original keywords.
+    if len(variants) < 2:
+        for kw in keywords[:2]:
+            variants.append(f"{kw} {base}")
 
     # Deduplicar preservando orden.
     seen: set[str] = set()
@@ -295,6 +403,12 @@ def build_search_queries(
         if v not in seen:
             seen.add(v)
             unique.append(v)
+
+    # Siempre al menos 1 variante.
+    if not unique:
+        fallback = keywords[0] if keywords else natural_query.strip()
+        unique.append(f"{fallback} {base}")
+
     return unique[:max_variants]
 
 

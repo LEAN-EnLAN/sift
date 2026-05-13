@@ -164,3 +164,116 @@ class TestSpeedHints:
 
     def test_has_speed_hint_false_when_not_present(self) -> None:
         assert has_speed_hint("autenticacion jwt en python") is False
+
+
+# ─── PR 2: Query v2 — Domain classification, traps, seeds, variant cap ─────
+
+
+class TestDomainClassification:
+    """Domain intent detection via classify_domain()."""
+
+    def test_domain_intent_pdf(self) -> None:
+        """Query with 'pdf' keyword classifies as pdf domain."""
+        from sift.query import classify_domain
+
+        domain = classify_domain(["pdf", "python"])
+        assert domain == "pdf"
+
+    def test_domain_intent_jwt_auth(self) -> None:
+        """Query with 'jwt' keyword classifies as jwt-auth domain."""
+        from sift.query import classify_domain
+
+        domain = classify_domain(["jwt", "authentication"])
+        assert domain == "jwt-auth"
+
+    def test_domain_intent_no_match_returns_none(self) -> None:
+        """Query with no domain-specific keywords returns None."""
+        from sift.query import classify_domain
+
+        domain = classify_domain(["search", "tool", "best"])
+        assert domain is None
+
+    def test_domain_intent_auth_general(self) -> None:
+        """Query with only generic auth keywords classifies as auth, not jwt-auth."""
+        from sift.query import classify_domain
+
+        domain = classify_domain(["authentication", "login", "oauth"])
+        assert domain == "auth"
+
+
+class TestLexicalTrap:
+    """Lexical trap filtering via _apply_lexical_traps()."""
+
+    def test_lexical_trap_edit(self) -> None:
+        """In pdf domain, 'editor' keyword is filtered out."""
+        from sift.query import _apply_lexical_traps
+
+        keywords = ["pdf", "editor", "python"]
+        result = _apply_lexical_traps("pdf", keywords)
+        assert "editor" not in result
+        assert "pdf" in result
+        assert "python" in result
+
+    def test_lexical_trap_noop_for_none_domain(self) -> None:
+        """With no domain, all keywords pass through."""
+        from sift.query import _apply_lexical_traps
+
+        keywords = ["pdf", "editor", "python"]
+        result = _apply_lexical_traps(None, keywords)
+        assert result == keywords
+
+    def test_lexical_trap_noop_for_unrelated_domain(self) -> None:
+        """Domain with no traps passes all keywords."""
+        from sift.query import _apply_lexical_traps
+
+        keywords = ["flask", "api"]
+        result = _apply_lexical_traps("boilerplate", keywords)
+        assert result == keywords
+
+
+class TestSeedInjection:
+    """Domain seed injection via _inject_seeds()."""
+
+    def test_seed_injection_jwt(self) -> None:
+        """JWT-auth domain returns expected seeds."""
+        from sift.query import _inject_seeds
+
+        seeds = _inject_seeds("jwt-auth")
+        assert "pyjwt" in seeds
+        assert "authlib" in seeds
+
+    def test_seed_injection_pdf(self) -> None:
+        """PDF domain returns expected seeds."""
+        from sift.query import _inject_seeds
+
+        seeds = _inject_seeds("pdf")
+        assert "pymupdf" in seeds
+        assert "pypdf" in seeds
+
+    def test_seed_injection_unknown_domain_empty(self) -> None:
+        """Unknown domain returns empty list."""
+        from sift.query import _inject_seeds
+
+        seeds = _inject_seeds("unknown-domain")
+        assert seeds == []
+
+    def test_seed_injection_none_domain_empty(self) -> None:
+        """None domain returns empty list."""
+        from sift.query import _inject_seeds
+
+        seeds = _inject_seeds(None)
+        assert seeds == []
+
+
+class TestBuildQueriesV2:
+    """build_search_queries() v2 variant generation."""
+
+    def test_variant_count_max_5(self) -> None:
+        """build_search_queries returns at most 5 variants."""
+        queries = build_search_queries("autenticación con JWT", "Python")
+        assert len(queries) <= 5
+
+    def test_variant_count_max_5_with_seeds(self) -> None:
+        """Even with domain seeds, at most 5 variants."""
+        queries = build_search_queries("procesar PDFs en python", "Python")
+        assert len(queries) <= 5

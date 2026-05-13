@@ -46,6 +46,9 @@ class RepoCandidate:
     last_commit_sha: str | None = None
     last_commit_url: str | None = None
 
+    # Query variant tracking (scoring v2)
+    search_variant_origin: str = ""
+
     # Score output
     score: float = 0.0
     score_parts: dict[str, float] = field(default_factory=dict)

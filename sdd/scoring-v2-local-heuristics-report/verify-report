@@ -1,0 +1,65 @@
+## Verification Report
+
+**Change**: scoring-v2-local-heuristics-report  
+**Boundary Verified**: PR 1 (Foundation only)  
+**Mode**: Strict TDD
+
+### Completeness vs PR 1 Scope
+| Check | Result | Evidence |
+|---|---|---|
+| `src/sift/scoring/` package exists | ✅ | `src/sift/scoring/__init__.py`, `seeds.py`, `stages.py` present |
+| `RepoCandidate.search_variant_origin` added | ✅ | `src/sift/models.py` line 50 includes `search_variant_origin: str = ""` |
+| v1 backward compatibility preserved | ✅ | `src/sift/cli.py` still imports `from .scoring import shortlist`; `PYTHONPATH=src python -c "from sift.scoring import shortlist, score_repo"` succeeds |
+| No ranking behavior change yet (PR 1) | ✅ | v1 `shortlist()/score_repo()` still implemented in `src/sift/scoring/__init__.py`; new v2 APIs are stubs |
+| PR 1 boundary respected (no v2 behavior rollout) | ✅ | `stages.py` and `score_repo_v2/shortlist_v2` are stubs; no query rewrite/ranking rewrite done |
+
+### Command Evidence
+| Command | Result | Evidence |
+|---|---|---|
+| `python -m compileall src` | ✅ PASS | Compiled `src/sift/scoring/*` with no syntax errors |
+| `pytest tests/` | ❌ FAIL | `29 failed, 122 passed`; all failures in `tests/test_tui.py` due to `ModuleNotFoundError: No module named 'textual'` |
+| `ruff check .` | ✅ PASS | `All checks passed!` |
+
+### Strict TDD Compliance
+| Check | Result | Details |
+|---|---|---|
+| TDD evidence table present in apply-progress | ✅ | `TDD Cycle Evidence` table found in artifact `sdd/.../apply-progress` |
+| RED evidence plausible | ✅ | PR 1 introduces/changes files with corresponding tests in `tests/test_scoring.py` |
+| GREEN evidence currently reproducible | ⚠️ Partial | PR 1 scoring tests pass within suite, but global `pytest tests/` fails due to missing `textual` dependency unrelated to PR 1 scoring scope |
+| Triangulation evidence | ✅ | Multiple assertions per PR 1 task (seeds, stages, exports, model field) |
+| Safety net claims | ⚠️ Partial | Reported for modified file; not independently replayed per-file historical run |
+
+**TDD Compliance Summary**: 3/5 fully verified, 2/5 partial due to environment/tooling constraints.
+
+### Test Layer Distribution (changed tests)
+| Layer | Tests | Files |
+|---|---:|---:|
+| Unit | 22 | 1 (`tests/test_scoring.py`) |
+| Integration | 0 | 0 |
+| E2E | 0 | 0 |
+
+### Assertion Quality Audit
+- Scanned changed PR-1 tests (`tests/test_scoring.py` additions around v2 foundation classes).
+- No tautologies (`assert True`, `expect(true).toBe(true)`), no ghost loops, no assertion-without-production-call patterns.
+- Assertions are mostly structural/contract checks appropriate for a foundation PR.
+
+**Assertion quality**: ✅ All assertions verify real behavior for declared PR 1 scope.
+
+### Spec/Design/Tasks Conformance (PR 1 only)
+| Artifact | Status | Notes |
+|---|---|---|
+| Tasks 1.1–1.5 | ✅ | Implemented as declared in apply-progress and codebase |
+| Spec compatibility | ✅ | Output contract preserved; no premature scoring/ranking behavior shift |
+| Design coherence | ✅ with noted deviation | `scoring.py` deleted and replaced by `scoring/` package; import path compatibility preserved |
+
+### Issues
+#### CRITICAL
+1. `pytest tests/` does not pass in this environment because `textual` is missing, causing 29 TUI test failures (`ModuleNotFoundError`).
+
+#### WARNING
+1. Strict TDD “GREEN confirmed” is partial at full-suite level because environment dependency prevents all tests from passing.
+
+### Final Verdict
+**FAIL**
+
+Reason: required verification gate includes `pytest tests/` pass, and this currently fails (29 failures), even though PR 1 foundation checks and backward-compat checks pass.
