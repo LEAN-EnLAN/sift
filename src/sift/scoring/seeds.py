@@ -14,7 +14,6 @@ DOMAIN_SEEDS: dict[str, list[str]] = {
     "cli": ["click", "typer", "argparse", "commander", "oclif"],
     "testing": ["pytest", "vitest", "jest", "mocha", "rspec", "junit"],
     "cache": ["redis", "memcached", "varnish", "cloudflare"],
-    "vector-db": ["qdrant", "weaviate", "milvus", "chroma", "faiss", "lancedb", "pgvector", "pinecone"],
     "logging": ["log4j", "logback", "winston", "pino", "structlog"],
     "serialization": ["protobuf", "avro", "msgpack", " pickle", "json"],
 }
