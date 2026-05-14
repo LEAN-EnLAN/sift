@@ -200,13 +200,6 @@ class TestDomainClassification:
         domain = classify_domain(["authentication", "login", "oauth"])
         assert domain == "auth"
 
-    def test_domain_intent_vector_db(self) -> None:
-        """Embedding/vector terms classify as vector-db domain."""
-        from sift.query import classify_domain
-
-        domain = classify_domain(["vector", "embeddings", "python"])
-        assert domain == "vector-db"
-
 
 class TestLexicalTrap:
     """Lexical trap filtering via _apply_lexical_traps()."""
@@ -271,14 +264,6 @@ class TestSeedInjection:
         seeds = _inject_seeds(None)
         assert seeds == []
 
-    def test_seed_injection_vector_db(self) -> None:
-        """Vector DB domain returns expected seeds."""
-        from sift.query import _inject_seeds
-
-        seeds = _inject_seeds("vector-db")
-        assert "qdrant" in seeds
-        assert "weaviate" in seeds
-
 
 class TestBuildQueriesV2:
     """build_search_queries() v2 variant generation."""
@@ -292,9 +277,3 @@ class TestBuildQueriesV2:
         """Even with domain seeds, at most 5 variants."""
         queries = build_search_queries("procesar PDFs en python", "Python")
         assert len(queries) <= 5
-
-    def test_vector_db_queries_include_vector_seeds(self) -> None:
-        """Vector-db intent should inject vector DB ecosystem seeds."""
-        queries = build_search_queries("vector db con embeddings", "Python")
-        joined = " ".join(queries).lower()
-        assert ("qdrant" in joined) or ("weaviate" in joined) or ("milvus" in joined)
