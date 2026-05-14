@@ -13,7 +13,15 @@ from .github import GitHubAPIError, GitHubClient
 from .interactive import InteractivePrompt, InteractiveSplash, is_interactive
 from .models import SearchOptions
 from .query import build_search_queries
-from .render import render_agent_json, render_compact_table, render_json, render_markdown, render_table
+from .render import (
+    render_agent_json,
+    render_compact_table,
+    render_hermes_json,
+    render_json,
+    render_markdown,
+    render_n8n_json,
+    render_table,
+)
 from .scoring import shortlist
 
 
@@ -236,6 +244,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="agent",
         help="Modo agente: salida JSON con _meta, machine-readable. Para integración con agentes/CI",
     )
+    parser.add_argument(
+        "--hermes",
+        action="store_true",
+        dest="hermes",
+        help="Modo Hermes: salida JSON con _meta + hermes_compliance, sin hint '?'. Para integración Hermes",
+    )
+    parser.add_argument(
+        "--n8n",
+        action="store_true",
+        dest="n8n",
+        help="Modo n8n: salida raw JSON array sin _meta. Para integración n8n",
+    )
     parser.add_argument("--debug", action="store_true", help="Muestra queries y configuración sin exponer secretos")
     return parser.parse_args(argv)
 
@@ -398,6 +418,84 @@ def _run_agent(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_hermes(args: argparse.Namespace) -> int:
+    """Run search in Hermes mode: JSON with hermes_compliance, no '?' hint."""
+    if not args.query:
+        print("Error: --query/-q es requerido para buscar.", file=sys.stderr)
+        return 2
+    if not args.language:
+        print("Error: --language/-l es requerido para buscar.", file=sys.stderr)
+        return 2
+
+    languages = [lang.strip() for lang in args.language.split(",") if lang.strip()]
+    options = SearchOptions(
+        query=args.query,
+        languages=languages,
+        top=args.top,
+        pool_size=args.pool_size,
+        min_stars=args.min_stars,
+        pushed_after=args.pushed_after,
+        license=args.license_filter,
+        include_forks=args.include_forks,
+        include_archived=args.include_archived,
+        max_candidates=args.max_candidates,
+        speed=args.speed,
+    )
+
+    started = time.perf_counter()
+    try:
+        repos = run(options, token=args.token, cache_ttl=args.cache_ttl, debug=args.debug)
+    except GitHubAPIError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+    elapsed = time.perf_counter() - started
+    print(
+        render_hermes_json(
+            repos,
+            speed_tier=args.speed,
+            query=args.query,
+            elapsed=round(elapsed, 2),
+            api_calls=len(repos),
+        )
+    )
+    return 0
+
+
+def _run_n8n(args: argparse.Namespace) -> int:
+    """Run search in n8n mode: raw JSON array, no _meta envelope."""
+    if not args.query:
+        print("Error: --query/-q es requerido para buscar.", file=sys.stderr)
+        return 2
+    if not args.language:
+        print("Error: --language/-l es requerido para buscar.", file=sys.stderr)
+        return 2
+
+    languages = [lang.strip() for lang in args.language.split(",") if lang.strip()]
+    options = SearchOptions(
+        query=args.query,
+        languages=languages,
+        top=args.top,
+        pool_size=args.pool_size,
+        min_stars=args.min_stars,
+        pushed_after=args.pushed_after,
+        license=args.license_filter,
+        include_forks=args.include_forks,
+        include_archived=args.include_archived,
+        max_candidates=args.max_candidates,
+        speed=args.speed,
+    )
+
+    try:
+        repos = run(options, token=args.token, cache_ttl=args.cache_ttl, debug=args.debug)
+    except GitHubAPIError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+    print(render_n8n_json(repos))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
@@ -418,6 +516,12 @@ def main(argv: list[str] | None = None) -> int:
     # Agent mode — force headless JSON with _meta.
     if args.agent:
         return _run_agent(args)
+
+    if args.hermes:
+        return _run_hermes(args)
+
+    if args.n8n:
+        return _run_n8n(args)
 
     # Interactive/TUI path — prompts for missing inputs.
     if args.force_interactive:

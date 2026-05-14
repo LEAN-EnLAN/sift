@@ -116,6 +116,77 @@ def render_agent_json(
     )
 
 
+def render_hermes_json(
+    repos: list[RepoCandidate],
+    *,
+    speed_tier: str = "balanced",
+    query: str = "",
+    elapsed: float = 0.0,
+    api_calls: int = 0,
+) -> str:
+    """JSON output for Hermes integration.
+
+    Same shape as agent JSON but:
+    - Adds ``hermes_compliance: "1.0"`` to _meta
+    - Omits the human hint key ``?``
+    """
+    payload: list[dict[str, Any]] = []
+    for r in repos:
+        payload.append(
+            {
+                "name": r.full_name,
+                "url": r.html_url,
+                "description": r.description,
+                "language": r.language,
+                "last_commit": r.last_commit_at or r.pushed_at,
+                "score": r.score,
+                "score_parts": r.score_parts,
+                "stars": r.stars,
+                "forks": r.forks,
+                "license": r.license_spdx,
+                "why": why_text(r),
+            }
+        )
+    return json.dumps(
+        {
+            "_meta": {
+                "sift_version": __version__,
+                "repo_scout_version": __version__,
+                "speed_tier": speed_tier,
+                "query": query,
+                "elapsed_seconds": elapsed,
+                "api_calls": api_calls,
+                "hermes_compliance": "1.0",
+            },
+            "results": payload,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+def render_n8n_json(repos: list[RepoCandidate]) -> str:
+    """Raw JSON array for n8n integration, no _meta envelope."""
+    payload: list[dict[str, Any]] = []
+    for r in repos:
+        payload.append(
+            {
+                "name": r.full_name,
+                "url": r.html_url,
+                "description": r.description,
+                "language": r.language,
+                "last_commit": r.last_commit_at or r.pushed_at,
+                "score": r.score,
+                "score_parts": r.score_parts,
+                "stars": r.stars,
+                "forks": r.forks,
+                "license": r.license_spdx,
+                "why": why_text(r),
+            }
+        )
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
 def render_table(repos: list[RepoCandidate]) -> str:
     width = max(88, shutil.get_terminal_size((120, 24)).columns)
     table = Table(

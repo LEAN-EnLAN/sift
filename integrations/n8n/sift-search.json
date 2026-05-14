@@ -1,0 +1,69 @@
+{
+  "name": "Sift — GitHub Repo Search",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "workflow-trigger",
+      "name": "When Executed",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'sift --query ' + JSON.stringify($json.query) + ' --language ' + JSON.stringify($json.language) + ' --n8n --no-interactive' }}",
+        "options": {}
+      },
+      "id": "sift-execute",
+      "name": "Run sift search",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse sift JSON output (raw array from --n8n)\nconst output = $input.first().json.stdout;\nreturn JSON.parse(output).map(repo => ({\n  json: {\n    name: repo.name,\n    url: repo.url,\n    description: repo.description,\n    language: repo.language,\n    score: repo.score,\n    stars: repo.stars,\n    forks: repo.forks,\n    license: repo.license,\n    why: repo.why,\n  }\n}));"
+      },
+      "id": "parse-results",
+      "name": "Parse results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    }
+  ],
+  "connections": {
+    "When Executed": {
+      "main": [
+        [
+          {
+            "node": "Run sift search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run sift search": {
+      "main": [
+        [
+          {
+            "node": "Parse results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
