@@ -106,6 +106,11 @@ SPEED_KEYWORDS: dict[str, str] = {
     "exhaustiva": "thorough",
 }
 
+VECTOR_DB_TIEBREAKER_TOLERANCE = 0.4
+JWT_AUTH_TIEBREAKER_TOLERANCE = 0.2
+LOW_CONFIDENCE_SCORE_DELTA = 0.5
+SINGLE_SOFT_HIT_PENALTY = 0.4
+
 _DOMAIN_PROFILES: dict[str, dict[str, set[str]]] = {
     "pdf": {"strict": {"pdf", "pdfs"}, "soft": set(), "negative": set()},
     "jwt-auth": {"strict": {"jwt", "json web token"}, "soft": {"token", "jws", "jwe"}, "negative": set()},
@@ -164,6 +169,13 @@ def _normalize_token(token: str) -> str:
 def _tokenize(text: str) -> list[str]:
     """Split text into normalized tokens."""
     return [_normalize_token(t) for t in re.split(r"\s+", text) if t.strip()]
+
+
+def _has_term(term: str, *, joined: str, token_set: set[str]) -> bool:
+    term_n = _normalize_token(term)
+    if " " in term_n:
+        return term_n in joined
+    return term_n in token_set
 
 
 def detect_language(natural_query: str) -> list[str]:
@@ -280,31 +292,27 @@ def classify_domain(keywords: list[str]) -> str | None:
     joined = " ".join(keywords).lower()
     token_set = {_normalize_token(k) for k in keywords}
 
-    def _has_term(term: str) -> bool:
-        term_n = term.lower().strip()
-        if " " in term_n:
-            return term_n in joined
-        return term_n in token_set
-
     for domain, profile in _DOMAIN_PROFILES.items():
         score = 0.0
         strict_hits = 0
         soft_hits = 0
         negative_hits = 0
         for term in profile["strict"]:
-            if _has_term(term):
+            if _has_term(term, joined=joined, token_set=token_set):
                 score += 2.0
                 strict_hits += 1
         for term in profile["soft"]:
-            if _has_term(term):
+            if _has_term(term, joined=joined, token_set=token_set):
                 score += 1.0
                 soft_hits += 1
         for term in profile["negative"]:
-            if _has_term(term):
+            if _has_term(term, joined=joined, token_set=token_set):
                 score -= 1.5
                 negative_hits += 1
-        # Precision gate: avoid over-firing from a single weak token.
-        if strict_hits == 0 and soft_hits < 2:
+        # Precision: single-soft-hit intents are allowed but penalized to avoid erratic jumps.
+        if strict_hits == 0 and soft_hits == 1:
+            score -= SINGLE_SOFT_HIT_PENALTY
+        if strict_hits == 0 and soft_hits < 1:
             continue
         if score > 0 and negative_hits <= strict_hits + soft_hits:
             scores[domain] = score
@@ -323,12 +331,12 @@ def classify_domain(keywords: list[str]) -> str | None:
         return "jwt-auth"
     if "vector-db" in tied and "embedding" in tied:
         return "vector-db"
-    if "vector-db" in scores and "embedding" in scores and scores["vector-db"] >= scores["embedding"] - 0.4:
+    if "vector-db" in scores and "embedding" in scores and scores["vector-db"] >= scores["embedding"] - VECTOR_DB_TIEBREAKER_TOLERANCE:
         return "vector-db"
-    if "jwt-auth" in scores and "auth" in scores and scores["jwt-auth"] >= scores["auth"] - 0.2:
+    if "jwt-auth" in scores and "auth" in scores and scores["jwt-auth"] >= scores["auth"] - JWT_AUTH_TIEBREAKER_TOLERANCE:
         return "jwt-auth"
     # Low-confidence ambiguity guard.
-    if len(ranked) > 1 and abs(scores[ranked[0]] - scores[ranked[1]]) < 0.5 and evidence[ranked[0]][0] == 0:
+    if len(ranked) > 1 and abs(scores[ranked[0]] - scores[ranked[1]]) < LOW_CONFIDENCE_SCORE_DELTA and evidence[ranked[0]][0] == 0:
         return None
     return best
 
@@ -434,10 +442,8 @@ def build_search_queries(
         variants.append(f"{domain_term} in:name,description,readme {base}")
 
     # 3. Keyword-broad: prefer a non-domain keyword (e.g. a tech/library name).
-    domain_triggers = (
-        _DOMAIN_PROFILES.get(domain, {}).get("strict", set())
-        | _DOMAIN_PROFILES.get(domain, {}).get("soft", set())
-    ) if domain else set()
+    profile = _DOMAIN_PROFILES.get(domain, {}) if domain else {}
+    domain_triggers = profile.get("strict", set()) | profile.get("soft", set())
     non_domain_kw = [kw for kw in clean_kw if kw.lower().strip() not in domain_triggers]
     if non_domain_kw:
         variants.append(f"{non_domain_kw[0]} {base}")
