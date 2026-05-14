@@ -20,6 +20,10 @@ dev = [
     "pytest",
     "pytest-asyncio",
 ]
+web = [
+    "starlette>=0.27",
+    "uvicorn>=0.23",
+]
 
 [project.scripts]
 sift = "sift.cli:main"

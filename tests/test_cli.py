@@ -396,3 +396,49 @@ class TestQuickKeyLoop:
                 result = main(["-q", "test", "-l", "Python", "--force-interactive"])
         assert result == 0
         mock_json.assert_called_once()
+
+
+class TestWebFlag:
+    """Tasks 3.1-3.3: --web flag parsing and routing."""
+
+    def test_web_flag_defaults_to_false(self) -> None:
+        args = parse_args(["-q", "test", "-l", "Python"])
+        assert args.web is False
+
+    def test_web_flag_parsed(self) -> None:
+        args = parse_args(["-q", "test", "-l", "Python", "--web"])
+        assert args.web is True
+
+    def test_web_flag_with_agent_warns(self, capsys) -> None:
+        """--web with --agent prints warning and runs agent mode."""
+        with patch("sift.cli._run_agent", return_value=0) as mock_agent:
+            result = main(["-q", "test", "-l", "Python", "--web", "--agent"])
+            assert result == 0
+            mock_agent.assert_called_once()
+        captured = capsys.readouterr()
+        assert "--web" in captured.err
+
+    def test_web_mode_calls_run_web(self) -> None:
+        """--web without --agent calls _run_web_mode."""
+        with patch("sift.cli._run_web_mode", return_value=0) as mock_web:
+            result = main(["-q", "test", "-l", "Python", "--web"])
+            assert result == 0
+            mock_web.assert_called_once()
+
+
+class TestWebPersistence:
+    """Task 3.4: search results persisted to history in all modes."""
+
+    def test_headless_mode_persists_results(self) -> None:
+        """Headless search persists results to history."""
+        with (
+            patch("sift.cli.is_interactive", return_value=False),
+            patch("sift.cli.run", return_value=[_make_repo()]) as mock_run,
+            patch("sift.cli.render_table", return_value=""),
+            patch("sift.cli.SearchHistoryStore") as mock_store_cls,
+        ):
+            mock_store = mock_store_cls.return_value
+            result = main(["-q", "test", "-l", "Python"])
+            assert result == 0
+            mock_run.assert_called_once()
+            mock_store.add_entry.assert_called_once()

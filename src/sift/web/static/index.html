@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sift — Web Companion</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>Sift</h1>
+            <p class="subtitle">Web Companion (Experimental)</p>
+        </header>
+        <main>
+            <section id="search-section">
+                <form id="search-form">
+                    <input type="text" id="query-input" placeholder="Search for a technical need..." autofocus>
+                    <input type="text" id="language-input" placeholder="Language (e.g. Python)">
+                    <button type="submit">Search</button>
+                </form>
+            </section>
+            <div id="content">
+                <aside id="history-sidebar">
+                    <h2>Recent Searches</h2>
+                    <ul id="history-list"></ul>
+                </aside>
+                <section id="results-section">
+                    <div id="results"></div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+</html>

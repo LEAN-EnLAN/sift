@@ -12,6 +12,7 @@ from .auth import clear_token, load_token, login_interactive
 from .github import GitHubAPIError, GitHubClient
 from .interactive import InteractivePrompt, InteractiveSplash, is_interactive
 from .models import SearchOptions
+from .persistence.history import SearchHistoryStore
 from .query import build_search_queries
 from .render import render_agent_json, render_compact_table, render_json, render_markdown, render_table
 from .scoring import shortlist
@@ -236,6 +237,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="agent",
         help="Modo agente: salida JSON con _meta, machine-readable. Para integración con agentes/CI",
     )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        dest="web",
+        help="[Experimental] Abrir companion web UI. Opt-in, no cambia comportamiento sin el flag.",
+    )
     parser.add_argument("--debug", action="store_true", help="Muestra queries y configuración sin exponer secretos")
     return parser.parse_args(argv)
 
@@ -398,6 +405,42 @@ def _run_agent(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_web_mode(args: argparse.Namespace) -> int:
+    """Run web companion mode: start local server and open browser."""
+    import threading
+
+    from .web.server import find_available_port, run_server
+
+    history_store = SearchHistoryStore()
+    port = find_available_port()
+
+    def _start_server() -> None:
+        try:
+            run_server(port=port)
+        except Exception as e:
+            print(f"Error starting web server: {e}", file=sys.stderr)
+
+    url = f"http://127.0.0.1:{port}"
+    print(f"Sift Web Companion: {url}", file=sys.stderr)
+
+    server_thread = threading.Thread(target=_start_server, daemon=True)
+    server_thread.start()
+
+    try:
+        opened = webbrowser.open(url)
+        if not opened:
+            print(f"Could not open browser automatically. Visit: {url}", file=sys.stderr)
+    except Exception:
+        print(f"Could not open browser. Visit: {url}", file=sys.stderr)
+
+    # Keep the main thread alive until interrupted
+    try:
+        server_thread.join()
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
@@ -417,7 +460,13 @@ def main(argv: list[str] | None = None) -> int:
 
     # Agent mode — force headless JSON with _meta.
     if args.agent:
+        if args.web:
+            print("Warning: --web is ignored in agent mode (--agent).", file=sys.stderr)
         return _run_agent(args)
+
+    # Web companion mode (experimental, opt-in).
+    if args.web:
+        return _run_web_mode(args)
 
     # Interactive/TUI path — prompts for missing inputs.
     if args.force_interactive:
@@ -459,6 +508,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 2
 
+    # Persist results to history (fire-and-forget).
+    try:
+        _persist_search(args.query, languages, repos)
+    except Exception:
+        pass  # Non-blocking; history failure should not break the search.
+
     if args.format == "json":
         print(render_json(repos))
     elif args.format == "markdown":
@@ -466,6 +521,27 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(render_table(repos))
     return 0
+
+
+def _persist_search(query: str, languages: list[str], repos: list) -> None:
+    """Persist search results to history store (fire-and-forget)."""
+    store = SearchHistoryStore()
+    results = []
+    for r in repos:
+        results.append(
+            {
+                "name": r.full_name,
+                "url": r.html_url,
+                "description": r.description,
+                "language": r.language,
+                "stars": r.stars,
+                "forks": r.forks,
+                "score": r.score,
+                "score_parts": r.score_parts,
+                "license": r.license_spdx,
+            }
+        )
+    store.add_entry(query, languages, results)
 
 
 if __name__ == "__main__":
