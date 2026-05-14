@@ -106,18 +106,31 @@ SPEED_KEYWORDS: dict[str, str] = {
     "exhaustiva": "thorough",
 }
 
-_DOMAIN_TRIGGER_SETS: dict[str, set[str]] = {
-    "pdf": {"pdf", "pdfs"},
-    "jwt-auth": {"jwt", "json web token", "token"},
-    "auth": {"auth", "authentication", "login", "sso", "oauth"},
-    "orm": {"orm"},
-    "boilerplate": {"boilerplate", "template", "starter", "scaffold"},
-    "scraping": {"scraping", "crawler", "scrape"},
-    "cli": {"cli", "command line"},
-    "testing": {"testing", "test", "tests"},
-    "cache": {"cache", "caching"},
-    "logging": {"log", "logging", "logger"},
-    "serialization": {"serialize", "serialization", "deserialize"},
+_DOMAIN_PROFILES: dict[str, dict[str, set[str]]] = {
+    "pdf": {"strict": {"pdf", "pdfs"}, "soft": set(), "negative": set()},
+    "jwt-auth": {"strict": {"jwt", "json web token"}, "soft": {"token", "jws", "jwe"}, "negative": set()},
+    "auth": {"strict": {"auth", "authentication", "login", "sso", "oauth"}, "soft": {"oidc", "signin"}, "negative": set()},
+    "orm": {"strict": {"orm"}, "soft": {"sqlalchemy", "hibernate", "entity"}, "negative": set()},
+    "boilerplate": {"strict": {"boilerplate", "template", "starter", "scaffold"}, "soft": set(), "negative": set()},
+    "scraping": {"strict": {"scraping", "crawler", "scrape"}, "soft": {"spider"}, "negative": set()},
+    "cli": {"strict": {"cli", "command line"}, "soft": {"terminal", "shell"}, "negative": set()},
+    "testing": {"strict": {"testing", "test", "tests"}, "soft": {"unit", "integration"}, "negative": set()},
+    "cache": {"strict": {"cache", "caching"}, "soft": {"redis", "memcached"}, "negative": set()},
+    "vector-db": {
+        "strict": {"vector database", "vectordb", "vector-db", "ann", "qdrant", "weaviate", "milvus", "pinecone"},
+        "soft": {"vector", "vectors", "embedding", "embeddings", "semantic search", "faiss", "pgvector", "lancedb"},
+        "negative": {"svg", "vector graphics", "illustrator"},
+    },
+    "embedding": {
+        "strict": {"embedding", "embeddings"},
+        "soft": {"sentence transformer", "feature vector", "bert", "clip"},
+        "negative": {"iframe", "embed html"},
+    },
+    "rag": {"strict": {"rag", "retrieval augmented generation"}, "soft": {"context retrieval", "knowledge base"}, "negative": set()},
+    "mlops": {"strict": {"mlops"}, "soft": {"ml pipeline", "model serving", "feature store"}, "negative": set()},
+    "ci-cd": {"strict": {"ci", "cd", "ci/cd", "jenkins", "github actions", "gitlab ci"}, "soft": {"pipeline", "build", "deploy"}, "negative": {"ml pipeline", "etl"}},
+    "logging": {"strict": {"log", "logging", "logger"}, "soft": {"structured logging"}, "negative": set()},
+    "serialization": {"strict": {"serialize", "serialization", "deserialize"}, "soft": {"protobuf", "avro", "msgpack"}, "negative": set()},
 }
 
 LANGUAGE_HINT_PREFIXES = {"en", "in", "with", "using", "para"}
@@ -262,19 +275,62 @@ def classify_domain(keywords: list[str]) -> str | None:
     Returns:
         Domain string (e.g., 'pdf', 'jwt-auth', 'auth') or None if no match.
     """
-    counts: dict[str, int] = {}
-    for kw in keywords:
-        kw_l = kw.lower().strip()
-        for domain, triggers in _DOMAIN_TRIGGER_SETS.items():
-            if kw_l in triggers:
-                counts[domain] = counts.get(domain, 0) + 1
-    if not counts:
+    scores: dict[str, float] = {}
+    evidence: dict[str, tuple[int, int, int]] = {}
+    joined = " ".join(keywords).lower()
+    token_set = {_normalize_token(k) for k in keywords}
+
+    def _has_term(term: str) -> bool:
+        term_n = term.lower().strip()
+        if " " in term_n:
+            return term_n in joined
+        return term_n in token_set
+
+    for domain, profile in _DOMAIN_PROFILES.items():
+        score = 0.0
+        strict_hits = 0
+        soft_hits = 0
+        negative_hits = 0
+        for term in profile["strict"]:
+            if _has_term(term):
+                score += 2.0
+                strict_hits += 1
+        for term in profile["soft"]:
+            if _has_term(term):
+                score += 1.0
+                soft_hits += 1
+        for term in profile["negative"]:
+            if _has_term(term):
+                score -= 1.5
+                negative_hits += 1
+        # Precision gate: avoid over-firing from a single weak token.
+        if strict_hits == 0 and soft_hits < 2:
+            continue
+        if score > 0 and negative_hits <= strict_hits + soft_hits:
+            scores[domain] = score
+            evidence[domain] = (strict_hits, soft_hits, negative_hits)
+    if not scores:
         return None
-    max_count = max(counts.values())
-    tied = [d for d, c in counts.items() if c == max_count]
+    # Prefer domains with stronger evidence before raw score.
+    ranked = sorted(
+        scores,
+        key=lambda d: (evidence[d][0], scores[d], evidence[d][1], -evidence[d][2]),
+        reverse=True,
+    )
+    best = ranked[0]
+    tied = [d for d in ranked if scores[d] == scores[best]]
     if "jwt-auth" in tied and "auth" in tied:
         return "jwt-auth"
-    return tied[0]
+    if "vector-db" in tied and "embedding" in tied:
+        return "vector-db"
+    if "vector-db" in scores and "embedding" in scores and scores["vector-db"] >= scores["embedding"] - 0.4:
+        return "vector-db"
+    if "jwt-auth" in scores and "auth" in scores and scores["jwt-auth"] >= scores["auth"] - 0.2:
+        return "jwt-auth"
+    # Low-confidence ambiguity guard.
+    if len(ranked) > 1 and abs(scores[ranked[0]] - scores[ranked[1]]) < 0.5 and evidence[ranked[0]][0] == 0:
+        return None
+    return best
 
 
 def _apply_lexical_traps(domain: str | None, keywords: list[str]) -> list[str]:
@@ -378,7 +434,10 @@ def build_search_queries(
         variants.append(f"{domain_term} in:name,description,readme {base}")
 
     # 3. Keyword-broad: prefer a non-domain keyword (e.g. a tech/library name).
-    domain_triggers = _DOMAIN_TRIGGER_SETS.get(domain, set()) if domain else set()
+    domain_triggers = (
+        _DOMAIN_PROFILES.get(domain, {}).get("strict", set())
+        | _DOMAIN_PROFILES.get(domain, {}).get("soft", set())
+    ) if domain else set()
     non_domain_kw = [kw for kw in clean_kw if kw.lower().strip() not in domain_triggers]
     if non_domain_kw:
         variants.append(f"{non_domain_kw[0]} {base}")
